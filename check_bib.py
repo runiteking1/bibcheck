@@ -30,10 +30,43 @@ SAMPLE_BIB = (
     "[6] J. Smith et al., 2020, A Study of Things, arXiv:2003.99999 "
     "[7] Q. Fictional and R. Imaginary, 2022, Deep Learning for Unicorn "
     "Detection, Journal of Made-Up Results 12(3), 45-67."
+    "[8] A. Vaswani et al., 2017, Attention Is All You Need, "
+    "https://arxiv.org/abs/1707.03762 " # Modify and see if it'll detect wrong arxiv.
+    "[9] K. He, X. Zhang, S. Ren, J. Sun, 2015, Deep Residual Learning for " # Modify, to see will detect wrong names
+    "https://arxiv.org/abs/1706.03762 "
+
 )
 
 POSITIVE = {"found", "matched"}
 NEGATIVE = {"not-found", "no-match"}
+
+
+def _arxiv_title(detail: str) -> str:
+    """Extract the title from an arXiv detail string.
+
+    Format: 'Author1, Author2. Title Here. published DATE. [updated DATE.]'
+    """
+    pub = detail.find(". published ")
+    if pub == -1:
+        return ""
+    before = detail[:pub]
+    dot = before.rfind(". ")
+    if dot == -1:
+        return ""
+    return before[dot + 2:]
+
+
+def _title_matches(detail: str, cited: str) -> bool:
+    """True if the arXiv title words mostly appear in the cited text."""
+    title = _arxiv_title(detail)
+    if not title:
+        return True
+    words = [w.lower() for w in title.split() if len(w) > 2]
+    if not words:
+        return True
+    cited_lower = cited.lower()
+    hits = sum(1 for w in words if w in cited_lower)
+    return hits / len(words) >= 0.5
 
 
 def check(bib_string: str) -> list[dict]:
@@ -57,6 +90,8 @@ def verdict(entry: dict) -> tuple[str, str]:
 
     for name in ("arXiv", "OSTI", "Crossref", "Elsevier", "Online"):
         if statuses[name] in POSITIVE:
+            if not _title_matches(details[name], entry["original_text"]):
+                return "MISMATCH", f"{name} record does not match: {details[name][:100]}"
             return "VERIFIED", f"{name}: {details[name][:100]}"
     if statuses["DOI"] == "found":
         return "DOI-OK", "DOI resolves at doi.org (weak signal: content not compared)"
